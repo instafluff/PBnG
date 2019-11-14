@@ -1,0 +1,284 @@
+<html>
+  <head>
+    <title>PBnG, a Paint By Numbers Generator created live on Twitch!</title>
+    <script src="MarchingSquaresOld.js"></script>
+    <script src="MarchingSquares.js"></script>
+  </head>
+  <body>
+    <canvas id="paint" width="300" height="300"></canvas>
+  </body>
+  <script type="text/javascript">
+    let canvas = document.getElementById("paint");
+    let ctx = canvas.getContext("2d");
+    const numColors = 8;
+    let imgData = null;
+    let pixels = [];
+    let clusters = [];
+    let buckets = [];
+    let pixelGroups = [];
+    let edgeGroups = [];
+    let step = -1;
+    let pass = 0;
+
+    function draw() {
+      switch( step ) {
+      case 0: // Setup palette colors from image
+        setupClusters( numColors );
+        // console.log( clusters );
+        step++;
+        break;
+      case 1: // Cluster pixels into palette colors
+        if( pass < 20 ) {
+          sortPixelsIntoClusters();
+          averageClusters();
+          updateImage();
+          // console.log( buckets );
+          pass++;
+        }
+        else {
+          step++;
+          pass = 0;
+        }
+        break;
+      case 2: // Group pixels into regions
+        if( pass == 0 ) {
+          pixelGroups = [];
+        }
+        if( pass < buckets.length ) {
+          pixelGroups.push( groupBucketPixels( buckets[ pass ] ) );
+          // console.log( pixelGroups );
+          pass++;
+        }
+        else {
+          step++;
+          pass = 0;
+        }
+        break;
+      case 3: // Get edges from regions
+        if( pass == 0 ) {
+          edgeGroups = [];
+        }
+        if( pass < pixelGroups.length ) {
+          // console.log( pixelGroups[ pass ] );
+          console.log( pass );
+          // edgeGroups.push( edgePixels( pixelGroups[ pass ] ) );
+          var outlines = pixelGroups[ pass ].map( x => marchThePixelsOpt( x[ 0 ].x, x[ 0 ].y ) );
+          outlines.forEach( x => edgeGroups.push( x ) );
+          // console.log( pixelGroups[ pass ][ 0 ].length );
+          // console.log( edgeGroups[ pass ][ 0 ].length );
+          // // console.log( edgeGroups );
+          // drawEdges();
+          // renderOutline();
+          pass++;
+        }
+        else {
+          step++;
+          pass = 0;
+        }
+        break;
+      case 4:
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        break;
+      }
+      if( imgData ) {
+        if( step < 4 ) {
+          ctx.putImageData( imgData, 0, 0 );
+        }
+        renderOutline();
+      }
+      window.requestAnimationFrame( draw );
+    }
+    draw();
+
+    window.addEventListener("paste", (e) => {
+      if( e.clipboardData  ) {
+        console.log( e.clipboardData );
+        console.log( e.clipboardData.items );
+        var items = e.clipboardData.items;
+        for (index in items) {
+          var item = items[index];
+          if (item.kind === 'file') {
+            var blob = item.getAsFile();
+            step = -1;
+            pass = 0;
+            loadImage( blob );
+          }
+        }
+      }
+    });
+
+    function loadImage( file ) {
+      var image = new Image();
+      image.onload = function() {
+        canvas.width = image.width;
+        canvas.height = image.height;
+        ctx.drawImage( image, 0, 0 );
+        step++;
+      };
+      var URLObj = window.URL || window.webkitURL;
+      image.src = URLObj.createObjectURL( file );
+    }
+
+    function setupClusters( numClusters ) {
+      imgData = ctx.getImageData( 0, 0, canvas.width, canvas.height );
+      pixels = [];
+      var index = 0;
+      for( var y = 0; y < canvas.height; y++ ) {
+        for( var x = 0; x < canvas.width; x++ ) {
+          var r = imgData.data[ index++ ];
+          var g = imgData.data[ index++ ];
+          var b = imgData.data[ index++ ];
+          var a = imgData.data[ index++ ];
+          pixels.push( { x, y, r, g, b, a } );
+        }
+      }
+      for( var i = 0; i < numClusters; i++ ) {
+        clusters.push( pixels[ Math.floor( Math.random() * pixels.length ) ] );
+      }
+    }
+
+    function sortPixelsIntoClusters() {
+      buckets = [];
+      pixels.forEach( p => {
+        var distances = clusters.map( (c, i) => ({
+          i,
+          dist: ( Math.pow( p.r - c.r, 2 ) + Math.pow( p.g - c.g, 2 ) + Math.pow( p.b - c.b, 2 ) )
+        }));
+        distances.sort( (a, b) => a.dist - b.dist );
+        var bucket = distances[ 0 ].i;
+        if( !buckets[ bucket ] ) {
+          buckets[ bucket ] = [];
+        }
+        buckets[ bucket ].push( p );
+      });
+      return buckets;
+    }
+
+    function averageClusters() {
+      clusters = buckets.map( bucket => ({
+        r: bucket.reduce( (total, p) => total + p.r, 0 ) / bucket.length,
+        g: bucket.reduce( (total, p) => total + p.g, 0 ) / bucket.length,
+        b: bucket.reduce( (total, p) => total + p.b, 0 ) / bucket.length,
+        a: bucket.reduce( (total, p) => total + p.a, 0 ) / bucket.length,
+      }) );
+      return clusters;
+    }
+
+    function updateImage() {
+      buckets.forEach( (bucket, i) => {
+        bucket.forEach( p => {
+          var loc = p.y * canvas.width * 4 + p.x * 4;
+          imgData.data[ loc + 0 ] = clusters[ i ].r;
+          imgData.data[ loc + 1 ] = clusters[ i ].g;
+          imgData.data[ loc + 2 ] = clusters[ i ].b;
+          imgData.data[ loc + 3 ] = clusters[ i ].a;
+        });
+      });
+    }
+
+    function drawEdges() {
+      edgeGroups.forEach( (groups) => {
+        groups.forEach( g => {
+          g.forEach( p => {
+            var loc = p.y * canvas.width * 4 + p.x * 4;
+            imgData.data[ loc + 0 ] = 0;
+            imgData.data[ loc + 1 ] = 0;
+            imgData.data[ loc + 2 ] = 0;
+            imgData.data[ loc + 3 ] = 255;
+          });
+        });
+      });
+    }
+
+    function renderOutline() {
+        //THIS IS IT, MARCHING SQUARES SAMPLE :
+        ctx.fillStyle = "#FF0000";
+        if( edgeGroups.length > 0 ) {
+          edgeGroups.forEach( outlinePoints => {
+            for(var i=0; i<outlinePoints.length; i+=2){
+                ctx.fillRect(outlinePoints[i], outlinePoints[i+1], 1, 1);
+            }
+          });
+        }
+    }
+
+    function groupBucketPixels( bucketPixels ) {
+      var group = [];
+      while( bucketPixels.length > 0 ) {
+        var pix = bucketPixels.pop();
+        var foundGroup = false;
+        for( var g = 0; g < group.length; g++ ) {
+          for( var i = 0; i < group[ g ].length; i++ ) {
+            if( Math.abs( pix.x - group[ g ][ i ].x ) < 2 &&
+                Math.abs( pix.y - group[ g ][ i ].y ) < 2 ) {
+                  group[ g ].push( pix );
+                  foundGroup = true;
+                break;
+            }
+          }
+          if( foundGroup ) { break; }
+        }
+        if( !foundGroup ) {
+          group.push( [ pix ] );
+        }
+      }
+      return group;
+    }
+
+    function marchThePixels( x, y ) {
+      MarchingSquaresOld.sourceCanvas = document.createElement("canvas");
+      MarchingSquaresOld.sourceCanvas.width = canvas.width + 2;
+      MarchingSquaresOld.sourceCanvas.height = canvas.height + 2;
+      MarchingSquaresOld.sourceContext = MarchingSquaresOld.sourceCanvas.getContext("2d");
+      MarchingSquaresOld.sourceContext.drawImage(canvas,1,1);
+
+      // Return list of x and y positions
+      return MarchingSquaresOld.walkPerimeter(x, y);
+    }
+
+    function marchThePixelsOpt( x, y ) {
+      MarchingSquares.sourceCanvas = document.createElement("canvas");
+      MarchingSquares.sourceCanvas.width = canvas.width + 2;
+      MarchingSquares.sourceCanvas.height = canvas.height + 2;
+      MarchingSquares.sourceContext = MarchingSquares.sourceCanvas.getContext("2d");
+      MarchingSquares.sourceContext.drawImage(canvas,1,1);
+
+      // Return list of x and y positions
+      return MarchingSquares.walkPerimeter(x, y);
+    }
+
+    function edgePixels( bucketPixels ) {
+      var group = [];
+      for( var i = 0; i < bucketPixels.length; i++ ) {
+        var pix = bucketPixels[ i ];
+        var above = false, left = false, right = false, below = false;
+        for( var j = 0; j < bucketPixels.length; j++ ) {
+          var p2 = bucketPixels[ j ];
+          if( Math.abs( pix.y - p2.y ) < 1 ) {
+            // check left and right
+            if( Math.abs( pix.x - p2.x + 1 ) < 1 ) {
+              left = true;
+            }
+            if( Math.abs( pix.x - p2.x - 1 ) < 1 ) {
+              right = true;
+            }
+          }
+          else if( Math.abs( pix.x - p2.x ) < 1 ) {
+            // check above and below
+            if( Math.abs( pix.y - p2.y + 1 ) < 1 ) {
+              above = true;
+            }
+            if( Math.abs( pix.y - p2.y - 1 ) < 1 ) {
+              below = true;
+            }
+          }
+        }
+        if( !( left && right && above && below ) ) {
+          group.push( pix );
+        }
+      }
+      return group;
+    }
+
+  </script>
+</html>
