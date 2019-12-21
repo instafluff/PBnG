@@ -1,0 +1,36 @@
+{
+  "name": "pbng",
+  "version": "1.0.0",
+  "description": "Paint By Numbers Generator created on Instafluff Twitch Stream",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/instafluff/PBnG.git"
+  },
+  "keywords": [
+    "Paint",
+    "By",
+    "Numbers",
+    "Generator",
+    "PBnG",
+    "Painting",
+    "Art",
+    "Instafluff",
+    "Twitch",
+    "Stream",
+    "Fun",
+    "Drawing"
+  ],
+  "author": "Instafluff",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/instafluff/PBnG/issues"
+  },
+  "homepage": "https://github.com/instafluff/PBnG#readme",
+  "dependencies": {
+    "webwebweb": "^1.1.8"
+  }
+}

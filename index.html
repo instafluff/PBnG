@@ -1,8 +1,9 @@
 <html>
   <head>
     <title>PBnG, a Paint By Numbers Generator created live on Twitch!</title>
-    <script src="MarchingSquaresOld.js"></script>
-    <script src="MarchingSquares.js"></script>
+    <script src="web/MarchingSquaresOld.js"></script>
+    <script src="web/MarchingSquares.js"></script>
+    <script src="web/pbng.js"></script>
   </head>
   <body>
     <canvas id="paint" width="300" height="300"></canvas>
@@ -10,7 +11,7 @@
   <script type="text/javascript">
     let canvas = document.getElementById("paint");
     let ctx = canvas.getContext("2d");
-    const numColors = 8;
+    const numColors = 3;
     let imgData = null;
     let pixels = [];
     let clusters = [];
@@ -23,14 +24,18 @@
     function draw() {
       switch( step ) {
       case 0: // Setup palette colors from image
-        setupClusters( numColors );
+        pixels = getPixelsFromCanvas( ctx );
+        clusters = groupIntoColorClusters( pixels, numColors );
+        imgData = ctx.getImageData( 0, 0, ctx.canvas.clientWidth, ctx.canvas.clientHeight );
         // console.log( clusters );
         step++;
         break;
       case 1: // Cluster pixels into palette colors
         if( pass < 20 ) {
-          sortPixelsIntoClusters();
-          averageClusters();
+          // pixels = getPixelsFromCanvas( ctx );
+          let result = runColorClusterPass( pixels, clusters );
+          buckets = result.buckets;
+          clusters = result.clusters;
           updateImage();
           // console.log( buckets );
           pass++;
@@ -40,45 +45,45 @@
           pass = 0;
         }
         break;
-      case 2: // Group pixels into regions
-        if( pass == 0 ) {
-          pixelGroups = [];
-        }
-        if( pass < buckets.length ) {
-          pixelGroups.push( groupBucketPixels( buckets[ pass ] ) );
-          // console.log( pixelGroups );
-          pass++;
-        }
-        else {
-          step++;
-          pass = 0;
-        }
-        break;
-      case 3: // Get edges from regions
-        if( pass == 0 ) {
-          edgeGroups = [];
-        }
-        if( pass < pixelGroups.length ) {
-          // console.log( pixelGroups[ pass ] );
-          console.log( pass );
-          // edgeGroups.push( edgePixels( pixelGroups[ pass ] ) );
-          var outlines = pixelGroups[ pass ].map( x => marchThePixelsOpt( x[ 0 ].x, x[ 0 ].y ) );
-          outlines.forEach( x => edgeGroups.push( x ) );
-          // console.log( pixelGroups[ pass ][ 0 ].length );
-          // console.log( edgeGroups[ pass ][ 0 ].length );
-          // // console.log( edgeGroups );
-          // drawEdges();
-          // renderOutline();
-          pass++;
-        }
-        else {
-          step++;
-          pass = 0;
-        }
-        break;
-      case 4:
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        break;
+      // case 2: // Group pixels into regions
+      //   if( pass == 0 ) {
+      //     pixelGroups = [];
+      //   }
+      //   if( pass < buckets.length ) {
+      //     pixelGroups.push( groupBucketPixels( buckets[ pass ] ) );
+      //     // console.log( pixelGroups );
+      //     pass++;
+      //   }
+      //   else {
+      //     step++;
+      //     pass = 0;
+      //   }
+      //   break;
+      // case 3: // Get edges from regions
+      //   if( pass == 0 ) {
+      //     edgeGroups = [];
+      //   }
+      //   if( pass < pixelGroups.length ) {
+      //     // console.log( pixelGroups[ pass ] );
+      //     console.log( pass );
+      //     // edgeGroups.push( edgePixels( pixelGroups[ pass ] ) );
+      //     var outlines = pixelGroups[ pass ].map( x => marchThePixelsOpt( x[ 0 ].x, x[ 0 ].y ) );
+      //     outlines.forEach( x => edgeGroups.push( x ) );
+      //     // console.log( pixelGroups[ pass ][ 0 ].length );
+      //     // console.log( edgeGroups[ pass ][ 0 ].length );
+      //     // // console.log( edgeGroups );
+      //     // drawEdges();
+      //     // renderOutline();
+      //     pass++;
+      //   }
+      //   else {
+      //     step++;
+      //     pass = 0;
+      //   }
+      //   break;
+      // case 4:
+      //   ctx.clearRect(0, 0, canvas.width, canvas.height);
+      //   break;
       }
       if( imgData ) {
         if( step < 4 ) {
@@ -110,58 +115,29 @@
     function loadImage( file ) {
       var image = new Image();
       image.onload = function() {
-        canvas.width = image.width;
-        canvas.height = image.height;
-        ctx.drawImage( image, 0, 0 );
+        canvas.width = 720;//image.width;
+        canvas.height = 720 / image.width * image.height;
+        ctx.drawImage( image, 0, 0, 720, image.height * 720 / image.width );
         step++;
       };
       var URLObj = window.URL || window.webkitURL;
       image.src = URLObj.createObjectURL( file );
     }
 
-    function setupClusters( numClusters ) {
-      imgData = ctx.getImageData( 0, 0, canvas.width, canvas.height );
-      pixels = [];
+    function getPixelsFromCanvas( context ) {
+      let imageData = context.getImageData( 0, 0, context.canvas.clientWidth, context.canvas.clientHeight );
+      let pixelData = [];
       var index = 0;
-      for( var y = 0; y < canvas.height; y++ ) {
-        for( var x = 0; x < canvas.width; x++ ) {
-          var r = imgData.data[ index++ ];
-          var g = imgData.data[ index++ ];
-          var b = imgData.data[ index++ ];
-          var a = imgData.data[ index++ ];
-          pixels.push( { x, y, r, g, b, a } );
+      for( var y = 0; y < context.canvas.clientHeight; y++ ) {
+        for( var x = 0; x < context.canvas.clientWidth; x++ ) {
+          var r = imageData.data[ index++ ];
+          var g = imageData.data[ index++ ];
+          var b = imageData.data[ index++ ];
+          var a = imageData.data[ index++ ];
+          pixelData.push( { x, y, r, g, b, a } );
         }
       }
-      for( var i = 0; i < numClusters; i++ ) {
-        clusters.push( pixels[ Math.floor( Math.random() * pixels.length ) ] );
-      }
-    }
-
-    function sortPixelsIntoClusters() {
-      buckets = [];
-      pixels.forEach( p => {
-        var distances = clusters.map( (c, i) => ({
-          i,
-          dist: ( Math.pow( p.r - c.r, 2 ) + Math.pow( p.g - c.g, 2 ) + Math.pow( p.b - c.b, 2 ) )
-        }));
-        distances.sort( (a, b) => a.dist - b.dist );
-        var bucket = distances[ 0 ].i;
-        if( !buckets[ bucket ] ) {
-          buckets[ bucket ] = [];
-        }
-        buckets[ bucket ].push( p );
-      });
-      return buckets;
-    }
-
-    function averageClusters() {
-      clusters = buckets.map( bucket => ({
-        r: bucket.reduce( (total, p) => total + p.r, 0 ) / bucket.length,
-        g: bucket.reduce( (total, p) => total + p.g, 0 ) / bucket.length,
-        b: bucket.reduce( (total, p) => total + p.b, 0 ) / bucket.length,
-        a: bucket.reduce( (total, p) => total + p.a, 0 ) / bucket.length,
-      }) );
-      return clusters;
+      return pixelData;
     }
 
     function updateImage() {
